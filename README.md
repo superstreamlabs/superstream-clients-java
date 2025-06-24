@@ -216,17 +216,6 @@ export SUPERSTREAM_TOPICS_LIST=orders,payments,user-events
 export SUPERSTREAM_LATENCY_SENSITIVE=true
 ```
 
-### SUPERSTREAM_LATENCY_SENSITIVE Explained
-
-The linger.ms parameter follows these rules:
-
-1. If SUPERSTREAM_LATENCY_SENSITIVE is set to true:
-   - Linger value will never be modified, regardless of other settings
-
-2. If SUPERSTREAM_LATENCY_SENSITIVE is set to false or not set:
-   - If no explicit linger exists in original configuration: Use Superstream's optimized value
-   - If explicit linger exists: Use the maximum of original value and Superstream's optimized value
-
 ## Prerequisites
 
 - Java 11 or higher
