@@ -17,14 +17,12 @@ public class SuperstreamManager {
     private static volatile SuperstreamManager instance;
 
     private final MetadataConsumer metadataConsumer;
-    private final ClientReporter clientReporter;
     private final ConfigurationOptimizer configurationOptimizer;
     private final Map<String, MetadataMessage> metadataCache;
     private final boolean disabled;
 
     private SuperstreamManager() {
         this.metadataConsumer = new MetadataConsumer();
-        this.clientReporter = new ClientReporter();
         this.configurationOptimizer = new ConfigurationOptimizer();
         this.metadataCache = new ConcurrentHashMap<>();
         this.disabled = Boolean.parseBoolean(System.getenv(DISABLED_ENV_VAR));
@@ -133,7 +131,6 @@ public class SuperstreamManager {
             if (!metadataMessage.isActive()) {
                 String errMsg = "[ERR-054] Superstream optimization is not active for this kafka cluster, please head to the Superstream console and activate it.";
                 logger.error(errMsg);
-                reportClientInformation(bootstrapServers, properties, metadataMessage, clientId, originalProperties, Collections.emptyMap(), errMsg);
                 
                 // Push ConfigInfo with error and original config for stats reporting
                 java.util.Deque<ai.superstream.agent.KafkaProducerInterceptor.ConfigInfo> cfgStack = ai.superstream.agent.KafkaProducerInterceptor.TL_CFG_STACK.get();
@@ -156,7 +153,6 @@ public class SuperstreamManager {
 
             if (modifiedKeys.isEmpty()) {
                 logger.debug("No configuration parameters were modified");
-                reportClientInformation(bootstrapServers, properties, metadataMessage, clientId, originalProperties, Collections.emptyMap(), "");
                 return false;
             }
 
@@ -207,17 +203,6 @@ public class SuperstreamManager {
             // Pass configuration info via ThreadLocal to interceptor's onExit (full map for original config)
             ai.superstream.agent.KafkaProducerInterceptor.TL_CFG_STACK.get()
                     .push(new ai.superstream.agent.KafkaProducerInterceptor.ConfigInfo(originalFullMap, optimizedProperties));
-
-            // Report client information
-            reportClientInformation(
-                    bootstrapServers,
-                    properties,
-                    metadataMessage,
-                    clientId,
-                    originalProperties,
-                    optimizedProperties,
-                    ""
-            );
 
             // Log optimization success with appropriate message based on configuration and client ID
             boolean isLatencySensitive = configurationOptimizer.isLatencySensitive();
@@ -320,51 +305,5 @@ public class SuperstreamManager {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(java.util.stream.Collectors.toList());
-    }
-
-    /**
-     * Report client information to the superstream.clients topic.
-     *
-     * @param bootstrapServers The Kafka bootstrap servers
-     * @param metadataMessage The metadata message
-     * @param clientId The client ID
-     * @param originalConfiguration The original configuration
-     * @param optimizedConfiguration The optimized configuration
-     */
-    public void reportClientInformation(String bootstrapServers, Properties originalProperties, MetadataMessage metadataMessage,
-                                         String clientId, Properties originalConfiguration,
-                                         Map<String, Object> optimizedConfiguration,
-                                         String error) {
-        try {
-            Map<String, Object> originalConfiguration1 = convertPropertiesToMap(originalConfiguration);
-            List<String> topics = getApplicationTopics();
-            String mostImpactfulTopic = configurationOptimizer.getMostImpactfulTopicName(metadataMessage, topics);
-
-            // Retrieve the producer UUID from ThreadLocal stack (aligned with TL_PROPS_STACK)
-            String producerUuid = null;
-            java.util.Deque<String> uuidStack = ai.superstream.agent.KafkaProducerInterceptor.TL_UUID_STACK.get();
-            if (!uuidStack.isEmpty()) {
-                producerUuid = uuidStack.peek();
-            }
-
-            boolean success = clientReporter.reportClient(
-                    bootstrapServers,
-                    originalProperties,
-                    metadataMessage != null ? metadataMessage.getSuperstreamClusterId() : null,
-                    metadataMessage != null ? metadataMessage.isActive() : false,
-                    clientId,
-                    originalConfiguration1,
-                    optimizedConfiguration,
-                    mostImpactfulTopic,
-                    producerUuid,
-                    error
-            );
-
-            if (!success) {
-                logger.error("[ERR-032] Failed to report client information to the superstream.clients topic");
-            }
-        } catch (Exception e) {
-            logger.error("[ERR-031] Error reporting client information: {}", e.getMessage(), e);
-        }
     }
 }
