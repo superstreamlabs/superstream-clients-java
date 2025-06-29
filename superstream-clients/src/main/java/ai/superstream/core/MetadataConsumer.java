@@ -50,7 +50,8 @@ public class MetadataConsumer {
             properties.forEach((key, value) -> {
                 // Mask sensitive values
                 if (key.toString().toLowerCase().contains("password") || 
-                    key.toString().toLowerCase().contains("sasl.jaas.config")) {
+                    key.toString().toLowerCase().contains("sasl.jaas.config") ||
+                    key.toString().equals("basic.auth.user.info")) {
                     configLog.append(key).append("=[MASKED], ");
                 } else {
                     configLog.append(key).append("=").append(value).append(", ");

@@ -6,7 +6,7 @@
     </envs>
     <option name="MAIN_CLASS_NAME" value="ai.superstream.examples.KafkaProducerExample" />
     <module name="kafka-clients-example" />
-    <option name="VM_PARAMETERS" value="-javaagent:$PROJECT_DIR$/superstream-clients/target/superstream-clients-1.0.205.jar" />
+    <option name="VM_PARAMETERS" value="-javaagent:$PROJECT_DIR$/superstream-clients/target/superstream-clients-1.0.206.jar" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/examples/kafka-clients-example" />
     <method v="2">
       <option name="Make" enabled="true" />

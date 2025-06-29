@@ -4,6 +4,7 @@ import ai.superstream.core.ClientStatsReporter;
 import ai.superstream.core.SuperstreamManager;
 import ai.superstream.model.MetadataMessage;
 import ai.superstream.util.SuperstreamLogger;
+import ai.superstream.util.ClientUtils;
 import net.bytebuddy.asm.Advice;
 import java.util.AbstractMap;
 
@@ -18,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.lang.ThreadLocal;
-import java.util.Collections;
 import java.util.List;
 import java.util.Arrays;
 
@@ -182,24 +182,6 @@ public class KafkaProducerInterceptor {
                         immutableOriginalMap.getClass().getName());
                 logger.error(errMsg);
 
-                // Report the error to the client
-                try {
-                    // Get metadata message before reporting
-                    AbstractMap.SimpleEntry<MetadataMessage, String> metadataResult = SuperstreamManager.getInstance().getOrFetchMetadataMessage(bootstrapServers, properties);
-                    MetadataMessage metadataMessage = metadataResult.getKey();
-                    SuperstreamManager.getInstance().reportClientInformation(
-                        bootstrapServers,
-                        properties,
-                        metadataMessage,
-                        clientId,
-                        properties,
-                        Collections.emptyMap(), // no optimized configuration since we can't optimize
-                        errMsg
-                    );
-                } catch (Exception e) {
-                    logger.error("[ERR-058] Failed to report client error: {}", e.getMessage(), e);
-                }
-
                 // Push ConfigInfo with error and original config for stats reporting
                 java.util.Deque<ConfigInfo> cfgStack = TL_CFG_STACK.get();
                 cfgStack.push(new ConfigInfo(propertiesToMap(properties), new java.util.HashMap<>(), errMsg));
@@ -349,7 +331,7 @@ public class KafkaProducerInterceptor {
                 }
                 if (cfgInfo != null) {
                     // Use the original configuration from ConfigInfo and get complete config with defaults
-                    java.util.Map<String, Object> completeConfig = ai.superstream.core.ClientReporter.getCompleteProducerConfig(cfgInfo.originalConfig);
+                    java.util.Map<String, Object> completeConfig = ClientUtils.getCompleteProducerConfig(cfgInfo.originalConfig);
                     java.util.Map<String, Object> optimizedConfig = cfgInfo.optimizedConfig != null ? cfgInfo.optimizedConfig : new java.util.HashMap<>();
                     reporter.setConfigurations(completeConfig, optimizedConfig);
                     // If optimizedConfig is empty and there is an error, set the error on the reporter
@@ -360,7 +342,7 @@ public class KafkaProducerInterceptor {
                     // No ConfigInfo available, so no optimization was performed
                     // Use the producer properties as both original and optimized (since no changes were made)
                     java.util.Map<String, Object> originalPropsMap = propertiesToMap(producerProps);
-                    java.util.Map<String, Object> completeConfig = ai.superstream.core.ClientReporter.getCompleteProducerConfig(originalPropsMap);
+                    java.util.Map<String, Object> completeConfig = ClientUtils.getCompleteProducerConfig(originalPropsMap);
                     reporter.setConfigurations(completeConfig, new java.util.HashMap<>());
                 }
 

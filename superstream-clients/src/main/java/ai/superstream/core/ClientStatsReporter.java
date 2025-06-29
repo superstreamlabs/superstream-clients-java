@@ -5,6 +5,7 @@ import ai.superstream.model.ClientStatsMessage;
 import ai.superstream.util.NetworkUtils;
 import ai.superstream.util.SuperstreamLogger;
 import ai.superstream.util.KafkaPropertiesUtils;
+import ai.superstream.util.ClientUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -139,7 +140,7 @@ public class ClientStatsReporter {
                     NetworkUtils.getLocalIpAddress(),
                     totalBytesBefore,
                     totalBytesAfter,
-                    ClientReporter.getClientVersion(),
+                    ClientUtils.getClientVersion(),
                     NetworkUtils.getHostname(),
                     producerUuid);
 
@@ -336,7 +337,8 @@ public class ClientStatsReporter {
                 baseProps.forEach((key, value) -> {
                     // Mask sensitive values
                     if (key.toString().toLowerCase().contains("password") || 
-                        key.toString().toLowerCase().contains("sasl.jaas.config")) {
+                        key.toString().toLowerCase().contains("sasl.jaas.config") ||
+                        key.toString().equals("basic.auth.user.info")) {
                         configLog.append(key).append("=[MASKED], ");
                     } else {
                         configLog.append(key).append("=").append(value).append(", ");
