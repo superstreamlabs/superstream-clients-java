@@ -29,7 +29,7 @@ public class SuperstreamAgent {
         }
 
         install(instrumentation);
-        
+
         // Log all SUPERSTREAM_ environment variables
         Map<String, String> superstreamEnvVars = new HashMap<>();
         System.getenv().forEach((key, value) -> {
@@ -48,7 +48,7 @@ public class SuperstreamAgent {
      */
     public static void agentmain(String arguments, Instrumentation instrumentation) {
         install(instrumentation);
-        
+
         // Log all SUPERSTREAM_ environment variables
         Map<String, String> superstreamEnvVars = new HashMap<>();
         System.getenv().forEach((key, value) -> {
@@ -77,5 +77,19 @@ public class SuperstreamAgent {
                         .visit(Advice.to(KafkaProducerCloseInterceptor.class)
                                 .on(ElementMatchers.named("close"))))
                 .installOn(instrumentation);
+
+        // Intercept KafkaConsumer constructor and poll() method for metrics collection
+        new AgentBuilder.Default()
+                .disableClassFormatChanges()
+                .type(ElementMatchers.nameEndsWith("KafkaConsumer"))
+                .transform((builder, typeDescription, classLoader, module,
+                        protectionDomain) -> builder
+                            .visit(Advice.to(KafkaConsumerInterceptor.class)
+                                .on(ElementMatchers.isConstructor()))
+                            .visit(Advice.to(KafkaConsumerInterceptor.class)
+                                .on(ElementMatchers.named("poll"))))
+                .installOn(instrumentation);
+
+        logger.info("Superstream Agent successfully installed instrumentation");
     }
 }
