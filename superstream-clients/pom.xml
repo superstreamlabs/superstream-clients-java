@@ -6,7 +6,7 @@
 
     <groupId>ai.superstream</groupId>
     <artifactId>superstream-clients</artifactId>
-    <version>1.0.206</version>
+    <version>1.0.207</version>
     <packaging>jar</packaging>
 
     <name>Superstream Kafka Client Optimizer</name>
