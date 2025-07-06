@@ -201,12 +201,31 @@ public class ClientStatsReporter {
      * present in {@code metrics} overwrites the previous value – even when the new
      * value is {@code 0.0}, negative or otherwise – but keys that are <em>missing</em>
      * are left untouched.
+     * <p>
+     * Special handling for compression-rate-avg and record-size-avg: if the new value is 0 and the previous
+     * value is greater than 0, preserve the previous value.
      */
     public void updateProducerMetrics(java.util.Map<String, Double> metrics) {
         if (!disabled && metrics != null) {
             latestMetrics.updateAndGet(prev -> {
                 java.util.Map<String, Double> merged = new java.util.HashMap<>(prev);
-                merged.putAll(metrics);
+                
+                // Special handling for compression-rate-avg and record-size-avg
+                for (java.util.Map.Entry<String, Double> entry : metrics.entrySet()) {
+                    String key = entry.getKey();
+                    Double newValue = entry.getValue();
+                    
+                    if (("compression-rate-avg".equals(key) || "record-size-avg".equals(key)) && newValue != null && newValue == 0.0) {
+                        Double prevValue = merged.get(key);
+                        if (prevValue != null && prevValue > 0.0) {
+                            // Keep the previous non-zero value instead of overwriting with 0
+                            continue;
+                        }
+                    }
+                    
+                    merged.put(key, newValue);
+                }
+                
                 return merged;
             });
         }
@@ -216,12 +235,30 @@ public class ClientStatsReporter {
      * Merge the latest per-topic metrics.  Same rationale as above, but we first
      * locate / create the nested map for each topic, then merge its individual
      * metric values.
+     * <p>
+     * Special handling for compression-rate: if the new value is 0 and the previous
+     * value is greater than 0, preserve the previous value.
      */
     public void updateTopicMetrics(java.util.Map<String, java.util.Map<String, Double>> topicMetrics) {
         if (!disabled && topicMetrics != null) {
             topicMetrics.forEach((topic, metricMap) -> {
                 java.util.Map<String, Double> existing = latestTopicMetrics.computeIfAbsent(topic, k -> new java.util.HashMap<>());
-                existing.putAll(metricMap);
+                
+                // Special handling for compression-rate
+                for (java.util.Map.Entry<String, Double> entry : metricMap.entrySet()) {
+                    String key = entry.getKey();
+                    Double newValue = entry.getValue();
+                    
+                    if ("compression-rate".equals(key) && newValue != null && newValue == 0.0) {
+                        Double prevValue = existing.get(key);
+                        if (prevValue != null && prevValue > 0.0) {
+                            // Keep the previous non-zero value instead of overwriting with 0
+                            continue;
+                        }
+                    }
+                    
+                    existing.put(key, newValue);
+                }
             });
         }
     }
