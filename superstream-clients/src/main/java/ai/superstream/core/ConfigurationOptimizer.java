@@ -81,7 +81,7 @@ public class ConfigurationOptimizer {
         // If latency sensitive, remove linger.ms setting
         if (isLatencySensitive && optimalConfiguration.containsKey("linger.ms")) {
             optimalConfiguration.remove("linger.ms");
-            logger.debug("Ignore linger.ms from optimizations due to latency-sensitive configuration");
+            logger.info("Ignore linger.ms from optimizations due to latency-sensitive configuration");
         }
 
         return optimalConfiguration;
@@ -113,7 +113,7 @@ public class ConfigurationOptimizer {
 
             // Skip linger.ms optimization if the application is latency-sensitive
             if ("linger.ms".equals(key) && isLatencySensitive) {
-                logger.debug("Skipping linger.ms optimization due to latency-sensitive configuration");
+                logger.info("Skipping linger.ms optimization due to latency-sensitive configuration");
                 continue;
             }
 
@@ -164,9 +164,9 @@ public class ConfigurationOptimizer {
             modifiedKeys.add(key);
 
             if (originalValue == null) {
-                logger.debug("Setting configuration: {}={} (was not previously set)", key, value);
+                logger.info("Setting configuration: {}={} (was not previously set)", key, value);
             } else {
-                logger.debug("Overriding configuration: {}={} (was: {})", key, value, originalValue);
+                logger.info("Overriding configuration: {}={} (was: {})", key, value, originalValue);
             }
         }
 
