@@ -143,7 +143,7 @@ public class ConfigurationOptimizer {
 
                     // Keep the existing value if it's larger than the recommended value
                     if (existingNumericValue > recommendedValue) {
-                        logger.info("Keeping existing {} value {} as it's greater than recommended value {}",
+                        logger.debug("Keeping existing {} value {} as it's greater than recommended value {}",
                                 key, existingNumericValue, recommendedValue);
                         continue; // Skip this key, keeping the existing value
                     }
