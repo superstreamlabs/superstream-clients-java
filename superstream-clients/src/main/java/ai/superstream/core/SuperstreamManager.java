@@ -152,7 +152,7 @@ public class SuperstreamManager {
             List<String> modifiedKeys = configurationOptimizer.applyOptimalConfiguration(properties, optimalConfiguration);
 
             if (modifiedKeys.isEmpty()) {
-                logger.debug("No configuration parameters were modified");
+                logger.info("No configuration parameters were modified");
                 return false;
             }
 
