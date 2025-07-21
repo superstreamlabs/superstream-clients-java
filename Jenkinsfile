@@ -2,6 +2,8 @@ def isManualTrigger() {
     return currentBuild.getBuildCauses().any { cause -> cause._class == 'hudson.model.Cause$UserIdCause' }
 }
 
+@Library('shared-library') _
+
 pipeline {
 
     agent {
@@ -19,6 +21,17 @@ pipeline {
 
     stages {
         stage('Read Version from pom.xml') {  
+            when {
+                anyOf {
+                    allOf {
+                        branch 'master'
+                        triggeredBy 'UserIdCause' // Manual trigger on master
+                    }
+                    allOf {
+                        branch 'latest'
+                    }
+                }
+            }            
             steps {
                 dir('superstream-clients'){
                     script {
@@ -120,6 +133,48 @@ pipeline {
         always {
             cleanWs()
         }
+        success {
+            script {
+                if (env.GIT_BRANCH == 'latest') {   
+                    sendSlackNotification('SUCCESS')         
+                    notifySuccessful()
+                }
+            }
+        }
+        
+        failure {
+            script {
+                if (env.GIT_BRANCH == 'latest') { 
+                    sendSlackNotification('FAILURE')              
+                    notifyFailed()
+                }
+            }            
+        }
+        aborted {
+            script {
+                if (env.BRANCH_NAME == 'latest') {
+                    sendSlackNotification('ABORTED')
+                }
+                // Get the build log to check for the specific exception and retry job
+                AgentOfflineException()
+            }          
+        }        
     }    
 }
 
+def notifySuccessful() {
+    emailext (
+        subject: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+        body: """SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':
+        Check console output and connection attributes at ${env.BUILD_URL}""",
+        to: 'tech-leads@superstream.ai'
+    )
+}
+def notifyFailed() {
+    emailext (
+        subject: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+        body: """FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]':
+        Check console output at ${env.BUILD_URL}""",
+        to: 'tech-leads@superstream.ai'
+    )
+}
