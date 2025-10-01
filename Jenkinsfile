@@ -8,7 +8,7 @@ pipeline {
 
     agent {
         docker {
-            label 'memphis-jenkins-big-fleet,'
+            label 'big-ec2-fleet'
             image 'maven:3.8.4-openjdk-17'
             args '-u root'
         }
