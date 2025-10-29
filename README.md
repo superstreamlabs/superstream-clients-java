@@ -36,6 +36,20 @@ Works with any Java library that depends on `kafka-clients`, including:
 
 The library fully supports Java versions 11 through 21.
 
+## Run Modes
+
+Superstream operates in one of two modes per `KafkaProducer` instance:
+
+- **INIT_CONFIG**: Superstream applies init-time configuration optimizations directly to the application's producer configuration before the producer is constructed. No shadow producer is created. The application calls run on the original producer.
+- **SHADOW**: Superstream initializes a shadow producer effectively replacing original producer and routes supported producer methods through it. After a learning period, a one-shot optimized configuration is applied to the shadow. The original producer remains in place; routing is transparent.
+
+### Default Optimizations
+
+When no topic-specific configuration is available (or during init-time defaults), Superstream applies:
+- `compression.type=zstd`
+- `batch.size=65536`
+- `linger.ms=5000` (skipped when `SUPERSTREAM_LATENCY_SENSITIVE=true`)
+
 ## Important: Producer Configuration Requirements
 
 When initializing your Kafka producers, please ensure you pass the configuration as a mutable object. The Superstream library needs to modify the producer configuration to apply optimizations. The following initialization patterns are supported:
@@ -200,10 +214,6 @@ ENTRYPOINT ["java", "-javaagent:/app/superstream-agent.jar", "-jar", "/app/app.j
 Alternatively, you can use a multi-stage build to download the agent from Maven Central:
 
 
-### Required Environment Variables
-
-- `SUPERSTREAM_TOPICS_LIST`: Comma-separated list of topics your application produces to
-
 ### Optional Environment Variables
 
 - `SUPERSTREAM_LATENCY_SENSITIVE`: Set to "true" to prevent any modification to linger.ms values
@@ -212,7 +222,6 @@ Alternatively, you can use a multi-stage build to download the agent from Maven 
 
 Example:
 ```bash
-export SUPERSTREAM_TOPICS_LIST=orders,payments,user-events
 export SUPERSTREAM_LATENCY_SENSITIVE=true
 ```
 

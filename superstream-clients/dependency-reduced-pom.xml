@@ -4,7 +4,7 @@
   <groupId>ai.superstream</groupId>
   <artifactId>superstream-clients</artifactId>
   <name>Superstream Kafka Client Optimizer</name>
-  <version>1.0.207</version>
+  <version>2.0.0</version>
   <description>A Java library that dynamically optimizes Kafka client configuration based on recommendations</description>
   <url>https://github.com/superstreamlabs/superstream-clients-java</url>
   <developers>
@@ -284,10 +284,10 @@
   </distributionManagement>
   <properties>
     <bytebuddy.version>1.14.9</bytebuddy.version>
+    <maven.compiler.target>11</maven.compiler.target>
     <maven.compiler.source>11</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <jackson.version>2.14.2</jackson.version>
     <kafka.version>3.3.2</kafka.version>
-    <maven.compiler.target>11</maven.compiler.target>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 </project>

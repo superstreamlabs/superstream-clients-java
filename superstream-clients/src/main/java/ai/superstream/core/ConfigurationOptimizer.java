@@ -1,11 +1,21 @@
 package ai.superstream.core;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import ai.superstream.model.MetadataMessage;
 import ai.superstream.model.TopicConfiguration;
 import ai.superstream.util.SuperstreamLogger;
-
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Optimizes Kafka producer configurations based on metadata.
@@ -29,11 +39,15 @@ public class ConfigurationOptimizer {
      * @return The optimal configuration, or an empty map if no optimization is
      *         possible
      */
+    /**
+     * Select optimal parameters for the given topics while honoring latency sensitivity.
+     * If SUPERSTREAM_LATENCY_SENSITIVE is set, we avoid setting linger.ms in the result.
+     */
     public Map<String, Object> getOptimalConfiguration(MetadataMessage metadataMessage,
             List<String> applicationTopics) {
         boolean isLatencySensitive = isLatencySensitive();
         if (isLatencySensitive) {
-            logger.debug("Application is marked as latency-sensitive, linger.ms will not be modified");
+            logger.debug().msg("Application is marked as latency-sensitive, linger.ms will not be modified");
         }
 
         // Get all matching topic configurations
@@ -47,12 +61,12 @@ public class ConfigurationOptimizer {
 
         if (matchingConfigurations.isEmpty()) {
             if (applicationTopics.isEmpty()) {
-                logger.debug(
-                        "SUPERSTREAM_TOPICS_LIST environment variable contains no topics. Applying default optimizations.");
+                logger.debug().msg(
+                        "No application topics provided. Applying default optimizations.");
             } else {
-                logger.debug(
+                logger.debug().msg(
                         "No matching topic configurations found for the application topics. Applying default optimizations.");
-                logger.warn(
+                logger.warn().msg(
                         "The topics you're publishing to haven't been analyzed yet. For optimal results, either wait for the next analysis cycle or trigger one manually via the SuperClient Console");
             }
 
@@ -64,10 +78,10 @@ public class ConfigurationOptimizer {
             // Only add linger if not latency-sensitive
             if (!isLatencySensitive) {
                 optimalConfiguration.put("linger.ms", 5000); // 5 seconds default
-                logger.debug(
+                logger.debug().msg(
                         "Default optimizations will be applied: compression.type=zstd, batch.size=32768, linger.ms=5000");
             } else {
-                logger.debug(
+                logger.debug().msg(
                         "Default optimizations will be applied: compression.type=zstd, batch.size=32768 (linger.ms unchanged)");
             }
             return optimalConfiguration;
@@ -94,13 +108,24 @@ public class ConfigurationOptimizer {
      * @param optimalConfiguration The optimal configuration to apply
      * @return The list of configuration keys that were modified
      */
-    public List<String> applyOptimalConfiguration(Properties properties, Map<String, Object> optimalConfiguration) {
+    /**
+     * Apply optimal parameters on top of the existing configuration with safeguards:
+     * - Preserve-if-larger for batch.size/linger.ms so user choices are kept when higher.
+     * - Respect SUPERSTREAM_LATENCY_SENSITIVE by skipping linger.ms.
+     * - Validate values before applying.
+     */
+    public List<String> applyOptimalConfiguration(Properties properties, Map<String, Object> optimalConfiguration, String topic) {
         if (optimalConfiguration == null || optimalConfiguration.isEmpty()) {
             return Collections.emptyList();
         }
 
         List<String> modifiedKeys = new ArrayList<>();
         boolean isLatencySensitive = isLatencySensitive();
+        String clientIdForLog = null;
+        try {
+            Object cid = (properties != null) ? properties.get("client.id") : null;
+            clientIdForLog = (cid != null) ? String.valueOf(cid) : "";
+        } catch (Throwable ignored) { clientIdForLog = ""; }
 
         for (Map.Entry<String, Object> entry : optimalConfiguration.entrySet()) {
             String key = entry.getKey();
@@ -113,7 +138,7 @@ public class ConfigurationOptimizer {
 
             // Skip linger.ms optimization if the application is latency-sensitive
             if ("linger.ms".equals(key) && isLatencySensitive) {
-                logger.info("Skipping linger.ms optimization due to latency-sensitive configuration");
+            logger.info().msg("Skipping linger.ms optimization due to latency-sensitive configuration");
                 continue;
             }
 
@@ -125,7 +150,7 @@ public class ConfigurationOptimizer {
                     recommendedValue = value instanceof Number ? ((Number) value).intValue()
                             : Integer.parseInt(value.toString());
                 } catch (NumberFormatException e) {
-                    logger.warn("Invalid recommended value for {}: {}. Skipping this parameter.", key, value);
+                    logger.warn().msg("Invalid recommended value for {}: {}. Skipping this parameter.", key, value);
                     continue;
                 }
 
@@ -137,13 +162,13 @@ public class ConfigurationOptimizer {
                         existingNumericValue = existingValue instanceof Number ? ((Number) existingValue).intValue()
                                 : Integer.parseInt(existingValue.toString());
                     } catch (NumberFormatException e) {
-                        logger.warn("Invalid existing {} value: {}. Will use recommended value.", key, existingValue);
+                        logger.warn().msg("Invalid existing {} value: {}. Will use recommended value.", key, existingValue);
                         existingNumericValue = 0;
                     }
 
                     // Keep the existing value if it's larger than the recommended value
                     if (existingNumericValue > recommendedValue) {
-                        logger.debug("Keeping existing {} value {} as it's greater than recommended value {}",
+                        logger.debug().msg("Keeping existing {} value {} as it's greater than recommended value {}",
                                 key, existingNumericValue, recommendedValue);
                         continue; // Skip this key, keeping the existing value
                     }
@@ -152,7 +177,7 @@ public class ConfigurationOptimizer {
 
             // Validate the configuration before applying
             if (!isValidConfiguration(key, value)) {
-                logger.warn("Invalid configuration value for {}: {}. Skipping this parameter.", key, value);
+                logger.warn().msg("Invalid configuration value for {}: {}. Skipping this parameter.", key, value);
                 continue;
             }
 
@@ -164,10 +189,11 @@ public class ConfigurationOptimizer {
             modifiedKeys.add(key);
 
             if (originalValue == null) {
-                logger.info("Setting configuration: {}={} (was not previously set)", key, value);
+                logger.info().withClientId(clientIdForLog).forTopic(topic).msg("Setting configuration: {}={} (was not previously set)", key, value);
             } else {
-                logger.info("Overriding configuration: {}={} (was: {})", key, value, originalValue);
+                logger.info().withClientId(clientIdForLog).forTopic(topic).msg("Overriding configuration: {}={} (was: {})", key, value, originalValue);
             }
+            
         }
 
         return modifiedKeys;
