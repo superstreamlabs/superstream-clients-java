@@ -1,8 +1,9 @@
 package ai.superstream.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 import java.util.Objects;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Represents the configuration for a specific Kafka topic.

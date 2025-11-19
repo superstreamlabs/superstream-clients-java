@@ -1,8 +1,9 @@
 package ai.superstream.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Objects;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Represents a message from the superstream.metadata_v1 topic.
@@ -15,6 +16,10 @@ public class MetadataMessage {
     // Optional: override for client stats reporting interval (milliseconds). Can be absent (null)
     @JsonProperty("report_interval_ms")
     private Long reportIntervalMs;
+
+    // Optional: agent learning period (minutes). If absent, agent will use default.
+    @JsonProperty("agent_learn_period_mins")
+    private Long agentLearnPeriodMins;
 
     public MetadataMessage() {
         // Default constructor for Jackson
@@ -63,6 +68,16 @@ public class MetadataMessage {
     @JsonProperty("report_interval_ms")
     public void setReportIntervalMs(Long reportIntervalMs) {
         this.reportIntervalMs = reportIntervalMs;
+    }
+
+    @JsonProperty("agent_learn_period_mins")
+    public Long getAgentLearnPeriodMins() {
+        return agentLearnPeriodMins;
+    }
+
+    @JsonProperty("agent_learn_period_mins")
+    public void setAgentLearnPeriodMins(Long agentLearnPeriodMins) {
+        this.agentLearnPeriodMins = agentLearnPeriodMins;
     }
 
     @Override
