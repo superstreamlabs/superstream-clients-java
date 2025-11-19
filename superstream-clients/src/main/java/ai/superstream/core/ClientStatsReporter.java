@@ -1,28 +1,32 @@
 package ai.superstream.core;
 
-import ai.superstream.agent.KafkaProducerInterceptor;
-import ai.superstream.model.ClientStatsMessage;
-import ai.superstream.util.NetworkUtils;
-import ai.superstream.util.SuperstreamLogger;
-import ai.superstream.util.KafkaPropertiesUtils;
-import ai.superstream.util.ClientUtils;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 
-import java.util.Properties;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.ConcurrentSkipListSet;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import ai.superstream.agent.KafkaProducerInterceptor;
+import ai.superstream.model.ClientStatsMessage;
+import ai.superstream.util.ClientUtils;
+import ai.superstream.util.KafkaPropertiesUtils;
+import ai.superstream.util.NetworkUtils;
+import ai.superstream.util.SuperstreamLogger;
 
 /**
  * Reports client statistics to the superstream.clients topic periodically.
@@ -36,6 +40,25 @@ public class ClientStatsReporter {
     // Default reporting interval (5 minutes) – overridden when metadata provides a different value
     private static final long DEFAULT_REPORT_INTERVAL_MS = 300000; // 5 minutes
     private static final String DISABLED_ENV_VAR = "SUPERSTREAM_DISABLED";
+
+    /**
+     * Baseline producer-level metrics that should always be present in reports.
+     *
+     * Semantics:
+     * - compression-rate-avg = 1.0 → no compression
+     * - outgoing-byte-total = 0.0  → no bytes sent yet
+     * - record-send-total   = 0.0  → no records sent yet
+     * - record-size-avg     = 0.0  → no records yet
+     */
+    private static final Map<String, Double> BASELINE_PRODUCER_METRICS;
+    static {
+        Map<String, Double> m = new HashMap<>();
+        m.put("compression-rate-avg", 1.0);
+        m.put("outgoing-byte-total", 0.0);
+        m.put("record-send-total", 0.0);
+        m.put("record-size-avg", 0.0);
+        BASELINE_PRODUCER_METRICS = Collections.unmodifiableMap(m);
+    }
 
     // Shared scheduler for all reporters to minimize thread usage
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -54,8 +77,8 @@ public class ClientStatsReporter {
     private final boolean disabled;
     private final String producerUuid;
 
-    private final AtomicReference<java.util.Map<String, Double>> latestMetrics = new AtomicReference<>(
-            new java.util.HashMap<>());
+    private final AtomicReference<Map<String, Double>> latestMetrics = new AtomicReference<>(
+            new HashMap<>(BASELINE_PRODUCER_METRICS));
     private java.util.Map<String, java.util.Map<String, Double>> latestTopicMetrics = new java.util.HashMap<>();
     private java.util.Map<String, java.util.Map<String, Double>> latestNodeMetrics = new java.util.HashMap<>();
     private java.util.Map<String, String> latestAppInfoMetrics = new java.util.HashMap<>();
