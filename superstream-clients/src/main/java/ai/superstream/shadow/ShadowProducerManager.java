@@ -657,6 +657,16 @@ public final class ShadowProducerManager {
                     unMeta = constructUnshadedRecordMetadata(unRecMetaCls, unTp, shaded);
                 }
 
+                // Guardrail: if we cannot construct metadata for a successful send, skip the
+                // routed callback rather than violating the usual contract (success + null metadata).
+                // The application's own producer callback (if any) will still see the real metadata.
+                if (unMeta == null && exception == null) {
+                    try {
+                        logger.debug("[ROUTED-CALLBACK] onCompletion: skipping routed callback because RecordMetadata could not be constructed and no exception is present");
+                    } catch (Throwable ignoredLog) { }
+                    return;
+                }
+
                 // Strategy 1: Prefer interface signature in the app classloader (most reliable)
                 if (ifaceMethod != null) {
                     try {
@@ -681,16 +691,35 @@ public final class ShadowProducerManager {
                     }
                 }
 
-                // Strategy 3: Fallback - find any compatible method by name with second param assignable from Throwable/Exception
+                // Strategy 3: Fallback - find a compatible method by name and parameter types.
+                // We require:
+                //  - name == "onCompletion"
+                //  - exactly two parameters
+                //  - second parameter assignable from Throwable/Exception
+                //  - (when available) first parameter type compatible with the app's RecordMetadata class
                 Method chosen = null;
                 for (Method m : unshadedCallback.getClass().getMethods()) {
                     if (!m.getName().equals("onCompletion")) continue;
                     if (m.getParameterCount() != 2) continue;
                     Class<?>[] pt = m.getParameterTypes();
                     if (!Throwable.class.isAssignableFrom(pt[1]) && !Exception.class.isAssignableFrom(pt[1])) continue;
+                    if (unRecMetaCls != null && !pt[0].isAssignableFrom(unRecMetaCls)) continue;
                     chosen = m;
                     break;
                 }
+                if (chosen != null) {
+                    Class<?>[] pt = chosen.getParameterTypes();
+                    Object arg0 = unMeta;
+                    Object arg1 = exception;
+
+                    // Ensure our arguments are compatible with the chosen method's parameters.
+                    if (arg0 != null && !pt[0].isInstance(arg0)) {
+                        chosen = null;
+                    } else if (arg1 != null && !pt[1].isInstance(arg1)) {
+                        chosen = null;
+                    }
+                }
+
                 if (chosen != null) {
                     try {
                         chosen.setAccessible(true);
@@ -722,41 +751,111 @@ public final class ShadowProducerManager {
      * @throws Exception if constructor invocation fails
      */
     private static Object constructUnshadedRecordMetadata(Class<?> unRecMetaCls, Object unTopicPartition, RecordMetadata shaded) throws Exception {
-        // Try known constructor patterns for Kafka 3.3.x and later versions
         Constructor<?>[] ctors = unRecMetaCls.getConstructors();
+
+        long offset = shaded.offset();
+        long timestamp = shaded.timestamp();
+        int serializedKeySize = shaded.serializedKeySize();
+        int serializedValueSize = shaded.serializedValueSize();
+
         for (Constructor<?> ctor : ctors) {
-            Class<?>[] p = ctor.getParameterTypes();
-            try {
-                boolean isTopicPartition = p.length == 6 
-                    && p[0].getName().equals("org.apache.kafka.common.TopicPartition")
-                    && p[1] == long.class 
-                    && p[2] == long.class
-                    && (p[3] == Integer.class || p[3] == int.class || p[3] == Long.class)
-                    && p[4] == int.class 
-                    && p[5] == int.class;
-                if (isTopicPartition) {
-                    int sk = shaded.serializedKeySize();
-                    int sv = shaded.serializedValueSize();
-                    // Constructor: RecordMetadata(TopicPartition, long offset, long timestamp, Integer leaderEpoch, int serializedKeySize, int serializedValueSize)
-                    // Pass null for leaderEpoch to accept any epoch type (Integer, int, or Long)
-                    return ctor.newInstance(unTopicPartition, shaded.offset(), shaded.timestamp(), null, sk, sv);
+            Class<?>[] params = ctor.getParameterTypes();
+            if (params.length == 0) {
+                continue;
+            }
+
+            boolean firstIsTopicPartition = "org.apache.kafka.common.TopicPartition".equals(params[0].getName());
+            if (!firstIsTopicPartition) {
+                continue;
+            }
+
+            Object[] args = new Object[params.length];
+            args[0] = unTopicPartition;
+
+            int longCount = 0;
+
+            // Collect indices of all int/Integer parameters (positions >= 1)
+            List<Integer> intPositions = new ArrayList<>();
+            for (int i = 1; i < params.length; i++) {
+                Class<?> p = params[i];
+                if (p == int.class || p == Integer.class) {
+                    intPositions.add(i);
                 }
-            } catch (Throwable ignored) { }
-        }
-        // Fallback: try constructors by parameter count (for older Kafka versions or alternative signatures)
-        for (Constructor<?> ctor : ctors) {
-            if (ctor.getParameterCount() == 6) {
-                try {
-                    return ctor.newInstance(unTopicPartition, shaded.offset(), shaded.timestamp(), null, shaded.serializedKeySize(), shaded.serializedValueSize());
-                } catch (Throwable ignored) { }
             }
-            if (ctor.getParameterCount() == 5) {
-                try {
-                    // Try 5-parameter constructor: (TopicPartition, long offset, long timestamp, int keySize, int valueSize)
-                    return ctor.newInstance(unTopicPartition, shaded.offset(), shaded.timestamp(), shaded.serializedKeySize(), shaded.serializedValueSize());
-                } catch (Throwable ignored) { }
+
+            // Decide which indices get key/value sizes: last two int positions, if present
+            int keySizeIndex = -1;
+            int valueSizeIndex = -1;
+            if (!intPositions.isEmpty()) {
+                valueSizeIndex = intPositions.get(intPositions.size() - 1);
+                if (intPositions.size() >= 2) {
+                    keySizeIndex = intPositions.get(intPositions.size() - 2);
+                }
+            }
+
+            for (int i = 1; i < params.length; i++) {
+                Class<?> p = params[i];
+
+                if (p == long.class || p == Long.class) {
+                    long value;
+                    if (longCount == 0) {
+                        value = offset;
+                    } else if (longCount == 1) {
+                        value = timestamp;
+                    } else {
+                        value = 0L;
+                    }
+                    args[i] = (p == long.class) ? value : Long.valueOf(value);
+                    longCount++;
+                    continue;
+                }
+
+                if (p == int.class || p == Integer.class) {
+                    int value;
+                    if (i == keySizeIndex) {
+                        value = serializedKeySize;
+                    } else if (i == valueSizeIndex) {
+                        value = serializedValueSize;
+                    } else {
+                        // Other int fields (e.g., leaderEpoch, future extensions) get a neutral default.
+                        value = 0;
+                    }
+                    args[i] = (p == int.class) ? value : Integer.valueOf(value);
+                    continue;
+                }
+
+                // For other reference types (e.g., leaderEpoch, checksum), pass null.
+                if (!p.isPrimitive()) {
+                    args[i] = null;
+                    continue;
+                }
+
+                // For any other primitive, fall back to the default zero value.
+                if (p == boolean.class) {
+                    args[i] = false;
+                } else if (p == byte.class) {
+                    args[i] = (byte) 0;
+                } else if (p == short.class) {
+                    args[i] = (short) 0;
+                } else if (p == char.class) {
+                    args[i] = (char) 0;
+                } else if (p == float.class) {
+                    args[i] = 0.0f;
+                } else if (p == double.class) {
+                    args[i] = 0.0d;
+                } else {
+                    // Should not reach here, but keep it safe.
+                    args[i] = null;
+                }
+            }
+
+            try {
+                return ctor.newInstance(args);
+            } catch (Throwable ignored) {
+                // Try the next constructor
             }
         }
+
         // No compatible constructor found - return null (application callback will receive null metadata)
         return null;
     }

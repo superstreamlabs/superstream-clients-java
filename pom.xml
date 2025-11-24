@@ -15,6 +15,7 @@
         <module>examples/akka-kafka-example</module>
         <module>examples/spring-kafka-example</module>
         <module>examples/pekko-kafka-example</module>
+        <module>examples/kafka-connect-example</module>
     </modules>
 
     <properties>
