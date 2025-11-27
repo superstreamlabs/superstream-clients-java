@@ -19,6 +19,6 @@ jobs:
         env:
           JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
         run: |
-          curl -X POST https://jenkins.superstream.ai//job/superstream-clients/buildWithParameters?DEPLOYMENT_TYPE=production \
+          curl -X POST https://jenkins.superstream.ai/job/superstream-clients/buildWithParameters?DEPLOYMENT_TYPE=production \
           --user "team@superstream.ai:$JENKINS_TOKEN" \
           --header "Content-Type: application/json"
