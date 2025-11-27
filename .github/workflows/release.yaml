@@ -3,9 +3,9 @@ name: Trigger Jenkins Job
 on:
   push:
     branches:
-      - remove-jenkinsfile
-    # paths:
-    #   - superstream-clients/pom.xml
+      - latest
+    paths:
+      - superstream-clients/pom.xml
 
 jobs:
   trigger-jenkins:
