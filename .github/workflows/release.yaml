@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - github-action
-      - latest
-    paths:
-      - superstream-clients/pom.xml
+    #   - latest
+    # paths:
+    #   - superstream-clients/pom.xml
 
 jobs:
   deploy:
