@@ -1,32 +1,101 @@
-name: Trigger Jenkins Job
+name: Maven Deploy and Release
 
 on:
   push:
     branches:
+      - github-action
       - latest
     paths:
       - superstream-clients/pom.xml
 
 jobs:
-  trigger-jenkins:
-    runs-on: self-hosted
+  deploy:
+    runs-on: ubuntu-latest
+    
+    env:
+      HOME: /home/runner
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Trigger Jenkins Job
-        env:
-          JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+      - name: Determine deployment type
+        id: deployment
         run: |
-          HTTP_STATUS=$(curl -w "%{http_code}" -o /tmp/jenkins_response.txt -f -X POST \
-            "https://jenkins.superstream.ai/job/DevOps/job/Superstream/job/SDK/job/superstream-clients-java/buildWithParameters?DEPLOYMENT_TYPE=production" \
-            --user "team@superstream.ai:$JENKINS_TOKEN")
-          
-          if [ $? -ne 0 ] || [ "$HTTP_STATUS" -ne 201 ] && [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "Jenkins trigger failed with HTTP status: $HTTP_STATUS"
-            cat /tmp/jenkins_response.txt
-            exit 1
+          # Automatic deployment based on branch
+          if [ "${{ github.ref }}" == "refs/heads/latest" ]; then
+            echo "type=production" >> $GITHUB_OUTPUT
+            echo "branch=latest" >> $GITHUB_OUTPUT
+          else
+            echo "type=beta" >> $GITHUB_OUTPUT
+            echo "branch=github-action" >> $GITHUB_OUTPUT
           fi
-          
-          echo "Successfully triggered Jenkins build (HTTP $HTTP_STATUS)"     
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --yes --passphrase "$GPG_PASSPHRASE" --import
+          echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+          gpg --list-secret-keys --keyid-format LONG
+          echo "D64C041FB68170463BE78AD7C4E3F1A8A5F0A659:6:" | gpg --import-ownertrust
+
+      - name: Read Version from pom.xml
+        id: version
+        working-directory: superstream-clients
+        run: |
+          POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "Original version from pom.xml: $POM_VERSION"
+          echo "base=$POM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Maven Settings
+        run: |
+          mkdir -p ~/.m2
+          echo "${{ secrets.MAVEN_SETTINGS }}" > ~/.m2/settings.xml
+
+      - name: Build and Deploy Beta
+        if: steps.deployment.outputs.type == 'beta'
+        working-directory: superstream-clients
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mvn -B package --file pom.xml
+          BETA_VERSION="${{ steps.version.outputs.base }}-beta"
+          echo "Setting beta version: $BETA_VERSION"
+          mvn versions:set -DnewVersion=$BETA_VERSION
+          mvn -s ~/.m2/settings.xml deploy -DautoPublish=true -Dgpg.passphrase="$GPG_PASSPHRASE"
+
+      - name: Build and Deploy Production
+        if: steps.deployment.outputs.type == 'production'
+        working-directory: superstream-clients
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          mvn -B package --file pom.xml
+          mvn -s ~/.m2/settings.xml deploy -DautoPublish=true -Dgpg.passphrase="$GPG_PASSPHRASE"
+
+      - name: Create GitHub Release
+        if: steps.deployment.outputs.type == 'production'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.base }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b $VERSION
+          git push origin $VERSION
+          cd superstream-clients
+          gh release create $VERSION target/superstream-clients-${VERSION}.jar --generate-notes
+
+
+
