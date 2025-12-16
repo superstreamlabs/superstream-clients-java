@@ -3,7 +3,7 @@ name: Maven Deploy and Release
 on:
   push:
     branches:
-      - github-action
+      - master
       - latest
     paths:
       - superstream-clients/pom.xml
