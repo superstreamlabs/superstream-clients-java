@@ -103,16 +103,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "✅ Production deployment succeeded for superstream-clients-java version ${{ steps.version.outputs.base }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "✅ *Production Deployment Succeeded*\n*Repository:* ${{ github.repository }}\n*Version:* ${{ steps.version.outputs.base }}\n*Branch:* ${{ steps.deployment.outputs.branch }}\n*Triggered by:* ${{ github.actor }}"
-                  }
-                }
-              ]
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release SUCCESSFUL"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -124,16 +115,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "❌ Production deployment failed for superstream-clients-java",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "❌ *Production Deployment Failed*\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ steps.deployment.outputs.branch }}\n*Triggered by:* ${{ github.actor }}\n*Workflow:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  }
-                }
-              ]
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release FAILED"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -145,16 +127,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "⚠️ Production deployment was cancelled for superstream-clients-java",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "⚠️ *Production Deployment Cancelled*\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ steps.deployment.outputs.branch }}\n*Triggered by:* ${{ github.actor }}"
-                  }
-                }
-              ]
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release CANCELLED"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
