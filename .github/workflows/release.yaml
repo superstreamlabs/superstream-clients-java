@@ -97,5 +97,39 @@ jobs:
           cd superstream-clients
           gh release create $VERSION target/superstream-clients-${VERSION}.jar --generate-notes
 
+      - name: Send Slack Notification - Success
+        if: success() && steps.deployment.outputs.type == 'production'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release SUCCESSFUL"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
+      - name: Send Slack Notification - Failure
+        if: failure() && steps.deployment.outputs.type == 'production'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release FAILED"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Send Slack Notification - Cancelled
+        if: cancelled() && steps.deployment.outputs.type == 'production'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "superstream-clients-java v${{ steps.version.outputs.base }} Production Release CANCELLED"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
